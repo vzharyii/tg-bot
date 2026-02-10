@@ -1,0 +1,197 @@
+# Additional access request handlers
+# Allows users to request access to scripts they don't have yet
+
+import json
+import logging
+from aiogram import types
+from aiogram.dispatcher import FSMContext
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+from bot.config import ADMIN_ID, REQUEST_PHOTO_FILE_ID
+from bot.models.states import UserStates
+from bot.database.connection import db_execute_with_retry, db_fetch_with_retry
+from bot.utils.ui import send_ui
+from bot.utils.access_control import get_user_script_access
+
+logger = logging.getLogger(__name__)
+
+
+def register_additional_access_handlers(dp):
+    """Register handlers for requesting additional script access"""
+    
+    @dp.callback_query_handler(text="request_additional_access", state="*")
+    async def cb_request_additional_access(call: types.CallbackQuery, state: FSMContext):
+        """Show menu to select which script to request access to"""
+        user_id = call.from_user.id
+        
+        # Get current access
+        current_access = await get_user_script_access(user_id)
+        if not current_access:
+            await call.answer("⚠️ Ошибка получения доступа", show_alert=True)
+            return
+        
+        # Get user nickname
+        row = await db_fetch_with_retry(
+            "SELECT nickname FROM access_list WHERE tg_user_id = %s",
+            (user_id,),
+            fetch="one",
+            action_desc="Ошибка получения ника"
+        )
+        
+        if not row:
+            await call.answer("⚠️ Профиль не найден", show_alert=True)
+            return
+        
+        nickname = row[0]
+        
+        # Find scripts without access
+        available_to_request = []
+        if not current_access.get('mine'):
+            available_to_request.append(('mine', '⛏ Скрипт Шахты'))
+        if not current_access.get('oskolki'):
+            available_to_request.append(('oskolki', '💎 Счетчик осколков'))
+        
+        if not available_to_request:
+            await call.answer("✅ У вас уже есть доступ ко всем скриптам!", show_alert=True)
+            return
+        
+        # Store in state
+        await state.update_data(
+            additional_access_nickname=nickname,
+            additional_access_current=current_access,
+            additional_access_selected={}
+        )
+        await UserStates.waiting_for_script_selection.set()
+        
+        # Show selection menu
+        await show_additional_access_menu(call, state, available_to_request)
+    
+    async def show_additional_access_menu(event, state, available_scripts):
+        """Show script selection menu for additional access"""
+        data = await state.get_data()
+        selected = data.get('additional_access_selected', {})
+        
+        caption = (
+            "➕ <b>Запрос дополнительного доступа</b>\n\n"
+            "Выберите скрипты, к которым хотите получить доступ:\n\n"
+        )
+        
+        for script_id, script_name in available_scripts:
+            prefix = '✅ ' if selected.get(script_id) else ''
+            caption += f"{prefix}<b>{script_name}</b>\n"
+        
+        caption += "\n<i>Нажмите на кнопки ниже для выбора</i>"
+        
+        markup = InlineKeyboardMarkup(row_width=1) # Wider buttons for full names
+        
+        # Add toggle buttons
+        buttons = []
+        for script_id, script_name in available_scripts:
+            prefix = '✅ ' if selected.get(script_id) else ''
+            buttons.append(InlineKeyboardButton(
+                f"{prefix}{script_name}",
+                callback_data=f"add_toggle_{script_id}"
+            ))
+        
+        if buttons:
+            for btn in buttons:
+                markup.add(btn)
+        
+        # Show submit button only if at least one script is selected
+        if any(selected.values()):
+            markup.add(InlineKeyboardButton("Отправить запрос", callback_data="add_submit"))
+        
+        markup.add(InlineKeyboardButton("🔙 Отмена", callback_data="menu_profile"))
+        
+        await send_ui(event, caption, markup)
+    
+    @dp.callback_query_handler(lambda c: c.data.startswith("add_toggle_"), state=UserStates.waiting_for_script_selection)
+    async def cb_add_toggle_script(call: types.CallbackQuery, state: FSMContext):
+        """Toggle script selection for additional access"""
+        script = call.data.replace("add_toggle_", "")
+        
+        data = await state.get_data()
+        selected = data.get('additional_access_selected', {})
+        current_access = data.get('additional_access_current', {})
+        
+        # Toggle the script
+        selected[script] = not selected.get(script, False)
+        await state.update_data(additional_access_selected=selected)
+        
+        # Get available scripts
+        available_to_request = []
+        if not current_access.get('mine'):
+            available_to_request.append(('mine', '⛏ Скрипт Шахты'))
+        if not current_access.get('oskolki'):
+            available_to_request.append(('oskolki', '💎 Счетчик осколков'))
+        
+        # Refresh the menu
+        await show_additional_access_menu(call, state, available_to_request)
+        await call.answer()
+    
+    @dp.callback_query_handler(text="add_submit", state=UserStates.waiting_for_script_selection)
+    async def cb_add_submit(call: types.CallbackQuery, state: FSMContext):
+        """Submit additional access request"""
+        data = await state.get_data()
+        nickname = data.get('additional_access_nickname')
+        current_access = data.get('additional_access_current', {})
+        selected = data.get('additional_access_selected', {})
+        user_id = call.from_user.id
+        
+        if not any(selected.values()):
+            await call.answer("⚠️ Выберите хотя бы один скрипт!", show_alert=True)
+            return
+        
+        # Build requested scripts list
+        requested_list = []
+        if selected.get('mine'):
+            requested_list.append("⛏ Скрипт Шахты")
+        if selected.get('oskolki'):
+            requested_list.append("💎 Счетчик осколков")
+        requested_text = ", ".join(requested_list)
+        
+        # Build current access list
+        current_list = []
+        if current_access.get('mine'):
+            current_list.append("⛏ Скрипт Шахты")
+        if current_access.get('oskolki'):
+            current_list.append("💎 Счетчик осколков")
+        current_text = ", ".join(current_list) if current_list else "нет"
+        
+        # Send to admin
+        user_link = f"@{call.from_user.username}" if call.from_user.username else f"<a href='tg://user?id={user_id}'>{call.from_user.full_name}</a>"
+        
+        caption_admin = (
+            f"➕ <b>ЗАПРОС ДОПОЛНИТЕЛЬНОГО ДОСТУПА</b>\n\n"
+            f"👤 <b>От:</b> {user_link} (ID: <code>{user_id}</code>)\n"
+            f"🎮 <b>Ник:</b> <code>{nickname}</code>\n\n"
+            f"📜 <b>Текущий доступ:</b> {current_text}\n"
+            f"➕ <b>Запрашивает:</b> {requested_text}"
+        )
+        
+        # Create admin approval keyboard
+        scripts_json = json.dumps(selected)
+        
+        markup_admin = InlineKeyboardMarkup(row_width=3)
+        markup_admin.add(
+            InlineKeyboardButton("✅ Одобрить все", callback_data=f"approve_additional_all:{user_id}:{scripts_json}"),
+            InlineKeyboardButton("⚙️ Выбрать", callback_data=f"approve_additional_select:{user_id}:{scripts_json}"),
+            InlineKeyboardButton("❌ Отказать", callback_data=f"reject_additional:{user_id}")
+        )
+        
+        try:
+            # Send with photo if file_id is set
+            if REQUEST_PHOTO_FILE_ID and REQUEST_PHOTO_FILE_ID != "ВСТАВЬ_СЮДА_FILE_ID_ФОТКИ_ЗАЯВОК":
+                await call.bot.send_photo(ADMIN_ID, REQUEST_PHOTO_FILE_ID, caption=caption_admin, reply_markup=markup_admin, parse_mode="HTML")
+            else:
+                await call.bot.send_message(ADMIN_ID, text=caption_admin, reply_markup=markup_admin, parse_mode="HTML")
+        except Exception as e:
+            logger.error(f"Err admin send: {e}")
+        
+        markup_home = InlineKeyboardMarkup()
+        markup_home.add(InlineKeyboardButton("👤 Профиль", callback_data="menu_profile"))
+        markup_home.add(InlineKeyboardButton("🏠 В главное меню", callback_data="menu_start"))
+        
+        await send_ui(call, f"✅ <b>Запрос отправлен!</b>\n\n📜 Запрошенные скрипты:\n{requested_text}\n\nОжидайте решения администратора.", markup_home)
+        await state.finish()
+        await call.answer()
