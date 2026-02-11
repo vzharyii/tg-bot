@@ -64,7 +64,7 @@ def register_admin_approval_handlers(dp):
         if requested_scripts.get('mine'):
             approved_list.append("⛏ Скрипт Шахты")
         if requested_scripts.get('oskolki'):
-            approved_list.append("💎 Счетчик осколков")
+            approved_list.append("🔮 Счетчик осколков")
         approved_text = ", ".join(approved_list)
         
         # Notify user
@@ -176,7 +176,7 @@ def register_admin_approval_handlers(dp):
         if requested.get('mine'):
             requested_list.append("⛏ Скрипт Шахты")
         if requested.get('oskolki'):
-            requested_list.append("💎 Счетчик осколков")
+            requested_list.append("🔮 Счетчик осколков")
         caption += ", ".join(requested_list) if requested_list else "нет"
         
         caption += "\n\n<b>Выберите что одобрить:</b>\n"
@@ -184,7 +184,7 @@ def register_admin_approval_handlers(dp):
         if requested.get('mine'):
             caption += f"{'✅ ' if selected.get('mine') else ''}<b>⛏ Скрипт Шахты</b>\n"
         if requested.get('oskolki'):
-            caption += f"{'✅ ' if selected.get('oskolki') else ''}<b>💎 Счетчик осколков</b>\n"
+            caption += f"{'✅ ' if selected.get('oskolki') else ''}<b>🔮 Счетчик осколков</b>\n"
         
         markup = InlineKeyboardMarkup(row_width=1)
         
@@ -197,7 +197,7 @@ def register_admin_approval_handlers(dp):
             ))
         if requested.get('oskolki'):
             buttons.append(InlineKeyboardButton(
-                f"{'✅ ' if selected.get('oskolki') else ''}💎 Счетчик осколков",
+                f"{'✅ ' if selected.get('oskolki') else ''}🔮 Счетчик осколков",
                 callback_data="admin_toggle_oskolki"
             ))
         
@@ -245,7 +245,7 @@ def register_admin_approval_handlers(dp):
         if requested.get('mine'):
             requested_list.append("⛏ Скрипт Шахты")
         if requested.get('oskolki'):
-            requested_list.append("💎 Счетчик осколков")
+            requested_list.append("🔮 Счетчик осколков")
         caption += ", ".join(requested_list) if requested_list else "нет"
         
         caption += "\n\n<b>Выберите что одобрить:</b>\n"
@@ -253,7 +253,7 @@ def register_admin_approval_handlers(dp):
         if requested.get('mine'):
             caption += f"{'✅ ' if selected.get('mine') else ''}<b>⛏ Скрипт Шахты</b>\n"
         if requested.get('oskolki'):
-            caption += f"{'✅ ' if selected.get('oskolki') else ''}<b>💎 Счетчик осколков</b>\n"
+            caption += f"{'✅ ' if selected.get('oskolki') else ''}<b>🔮 Счетчик осколков</b>\n"
         
         markup = InlineKeyboardMarkup(row_width=1)
         
@@ -265,7 +265,7 @@ def register_admin_approval_handlers(dp):
             ))
         if requested.get('oskolki'):
             buttons.append(InlineKeyboardButton(
-                f"{'✅ ' if selected.get('oskolki') else ''}💎 Счетчик осколков",
+                f"{'✅ ' if selected.get('oskolki') else ''}🔮 Счетчик осколков",
                 callback_data="admin_toggle_oskolki"
             ))
         
@@ -318,7 +318,7 @@ def register_admin_approval_handlers(dp):
         if selected.get('mine'):
             approved_list.append("⛏ Скрипт Шахты")
         if selected.get('oskolki'):
-            approved_list.append("💎 Счетчик осколков")
+            approved_list.append("🔮 Счетчик осколков")
         approved_text = ", ".join(approved_list)
         
         # Notify user
@@ -460,9 +460,9 @@ def register_admin_approval_handlers(dp):
         # Build newly granted scripts list
         newly_granted = []
         if requested_scripts.get('mine'):
-            newly_granted.append("⛏ Шахты")
+            newly_granted.append("⛏ Скрпит Шахты")
         if requested_scripts.get('oskolki'):
-            newly_granted.append("💎 Осколки")
+            newly_granted.append("🔮 Счетчик Осколков")
         granted_text = ", ".join(newly_granted)
         
         # Notify user

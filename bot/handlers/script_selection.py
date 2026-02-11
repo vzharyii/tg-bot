@@ -24,7 +24,7 @@ async def show_script_selection_menu(event, state):
         "📜 <b>Шаг 3/3: Выбор скриптов</b>\n\n"
         "Выберите к каким скриптам вы хотите получить доступ:\n\n"
         f"{'✅ ' if selected.get('mine') else ''}<b>⛏ Скрипт Шахты</b>\n"
-        f"{'✅ ' if selected.get('oskolki') else ''}<b>💎 Счетчик осколков</b>\n\n"
+        f"{'✅ ' if selected.get('oskolki') else ''}<b>🔮 Счетчик осколков</b>\n\n"
         "<i>Нажмите на кнопки ниже для выбора</i>"
     )
     
@@ -35,7 +35,7 @@ async def show_script_selection_menu(event, state):
             callback_data="reg_toggle_mine"
         ),
         InlineKeyboardButton(
-            f"{'✅ ' if selected.get('oskolki') else ''}💎 Счетчик осколков",
+            f"{'✅ ' if selected.get('oskolki') else ''}🔮 Счетчик осколков",
             callback_data="reg_toggle_oskolki"
         )
     )
@@ -98,7 +98,7 @@ def register_script_selection_handlers(dp):
         if selected_scripts.get('mine'):
             requested_scripts_list.append("⛏ Скрипт Шахты")
         if selected_scripts.get('oskolki'):
-            requested_scripts_list.append("💎 Счетчик осколков")
+            requested_scripts_list.append("🔮 Счетчик осколков")
         requested_scripts_text = ", ".join(requested_scripts_list)
 
         # Send to admin with script selection buttons

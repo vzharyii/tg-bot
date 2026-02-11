@@ -192,7 +192,7 @@ def register_admin_handlers(dp):
                 # Update cache
                 from bot.models.cache import access_cache_set
                 access_cache_set(user_id, nickname)
-                await message.reply(f"✅ Доступ к '💎 Счетчик осколков' отозван у пользователя <code>{nickname}</code>", parse_mode="HTML")
+                await message.reply(f"✅ Доступ к '🔮 Счетчик осколков' отозван у пользователя <code>{nickname}</code>", parse_mode="HTML")
             else:
                 await message.reply("❌ Ошибка базы данных")
                 

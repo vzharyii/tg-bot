@@ -49,7 +49,7 @@ def register_additional_access_handlers(dp):
         if not current_access.get('mine'):
             available_to_request.append(('mine', '⛏ Скрипт Шахты'))
         if not current_access.get('oskolki'):
-            available_to_request.append(('oskolki', '💎 Счетчик осколков'))
+            available_to_request.append(('oskolki', '🔮 Счетчик осколков'))
         
         if not available_to_request:
             await call.answer("✅ У вас уже есть доступ ко всем скриптам!", show_alert=True)
@@ -123,7 +123,7 @@ def register_additional_access_handlers(dp):
         if not current_access.get('mine'):
             available_to_request.append(('mine', '⛏ Скрипт Шахты'))
         if not current_access.get('oskolki'):
-            available_to_request.append(('oskolki', '💎 Счетчик осколков'))
+            available_to_request.append(('oskolki', '🔮 Счетчик осколков'))
         
         # Refresh the menu
         await show_additional_access_menu(call, state, available_to_request)
@@ -147,7 +147,7 @@ def register_additional_access_handlers(dp):
         if selected.get('mine'):
             requested_list.append("⛏ Скрипт Шахты")
         if selected.get('oskolki'):
-            requested_list.append("💎 Счетчик осколков")
+            requested_list.append("🔮 Счетчик осколков")
         requested_text = ", ".join(requested_list)
         
         # Build current access list
@@ -155,7 +155,7 @@ def register_additional_access_handlers(dp):
         if current_access.get('mine'):
             current_list.append("⛏ Скрипт Шахты")
         if current_access.get('oskolki'):
-            current_list.append("💎 Счетчик осколков")
+            current_list.append("🔮 Счетчик осколков")
         current_text = ", ".join(current_list) if current_list else "нет"
         
         # Send to admin
