@@ -104,8 +104,20 @@ def register_registration_handlers(dp):
             if row:
                 nickname, approved = row
                 
-                # If approved
-                if approved:
+                # Robust check if user is approved
+                is_approved = False
+                if approved == 1 or approved == '1':
+                    is_approved = True
+                elif isinstance(approved, str) and (approved.startswith('{') or approved.startswith('[')):
+                    import json
+                    try:
+                        acc_dict = json.loads(approved)
+                        if isinstance(acc_dict, dict) and any(acc_dict.values()):
+                            is_approved = True
+                    except:
+                        pass
+                
+                if is_approved:
                     return await call.answer("✅ У вас уже есть доступ! Проверьте профиль.", show_alert=True)
                 
                 # If pending

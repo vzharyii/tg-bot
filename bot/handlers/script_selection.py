@@ -82,12 +82,21 @@ def register_script_selection_handlers(dp):
             await call.answer("⚠️ Выберите хотя бы один скрипт!", show_alert=True)
             return
         
-        # Save application to DB with NULL (pending approval)
-        # The requested scripts will be shown to admin in the notification
+        # Prepare requested access JSON
+        requested_access = {}
+        if selected_scripts.get('mine'):
+            requested_access['mine'] = True
+        if selected_scripts.get('oskolki'):
+            requested_access['oskolki'] = True
+            
+        requested_json = json.dumps(requested_access)
+        
+        # Save application to DB
+        # approved=0 means pending, requested_access stores what they want
         success = await db_execute_with_retry(
-            "INSERT INTO access_list (nickname, tg_user_id, approved) VALUES (%s, %s, NULL) "
-            "ON DUPLICATE KEY UPDATE nickname=%s, approved=NULL",
-            (nick, user_id, nick),
+            "INSERT INTO access_list (nickname, tg_user_id, approved, requested_access) VALUES (%s, %s, 0, %s) "
+            "ON DUPLICATE KEY UPDATE nickname=%s, approved=0, requested_access=%s",
+            (nick, user_id, requested_json, nick, requested_json),
             action_desc="Ошибка сохранения заявки"
         )
         if not success:
@@ -114,12 +123,20 @@ def register_script_selection_handlers(dp):
         
         # Create admin approval keyboard
         # Encode requested scripts in callback for admin to use
-        scripts_json = json.dumps(selected_scripts)
+        # Use short format to prevent overflow: m1o0 (mine=1, oskolki=0)
+        short_code_parts = []
+        if selected_scripts.get('mine'): short_code_parts.append('m1')
+        else: short_code_parts.append('m0')
+        
+        if selected_scripts.get('oskolki'): short_code_parts.append('o1')
+        else: short_code_parts.append('o0')
+        
+        scripts_code = "".join(short_code_parts)
         
         markup_admin = InlineKeyboardMarkup(row_width=3)
         markup_admin.add(
-            InlineKeyboardButton("✅ Одобрить все", callback_data=f"approve_all:{user_id}:{scripts_json}"),
-            InlineKeyboardButton("⚙️ Выбрать", callback_data=f"approve_select:{user_id}:{scripts_json}"),
+            InlineKeyboardButton("✅ Одобрить все", callback_data=f"approve_all:{user_id}:{scripts_code}"),
+            InlineKeyboardButton("⚙️ Выбрать", callback_data=f"approve_select:{user_id}:{scripts_code}"),
             InlineKeyboardButton("❌ Отказать", callback_data=f"pre_no:{nick}:{user_id}")
         )
         markup_admin.add(

@@ -76,6 +76,10 @@ async def ban_user_system(user_id, fullname, username, reason):
             (user_id,),
             action_desc="Ошибка удаления заявки при бане"
         )
+        
+        # Clear access cache
+        from bot.models.cache import access_cache_remove
+        access_cache_remove(user_id)
     
     # Create bot instance for sending messages
     bot = Bot(token=API_TOKEN)

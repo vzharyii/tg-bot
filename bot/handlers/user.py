@@ -20,6 +20,36 @@ from bot.middleware.security import check_user_status
 logger = logging.getLogger(__name__)
 
 
+async def cb_menu_start(call: types.CallbackQuery, state: FSMContext):
+    """Return to main menu"""
+    await state.finish()
+    
+    # Delete script file if it was sent (in background, non-blocking)
+    file_msg_id = last_bot_msg.get(f"{call.from_user.id}_file")
+    if file_msg_id:
+        async def delete_file():
+            try:
+                await call.bot.delete_message(call.from_user.id, file_msg_id)
+                del last_bot_msg[f"{call.from_user.id}_file"]
+            except:
+                pass
+        asyncio.create_task(delete_file())
+    
+    caption = (
+        f"👋 <b>Привет, {call.from_user.first_name}!</b>\n\n"
+        "🤖 <b>Magic Bot</b> — твой помощник для получения доступа к скриптам.\n\n"
+        "💎 <b>Возможности бота:</b>\n"
+        "🛡 <b>Система доступа:</b> Принимает заявку и после одобрения дает возможность скачивание скрипта с уже активным к нему доступом.\n"
+        "📜 <b>Библиотека скриптов:</b>\n"
+        "   ├ ⛏ <b>Скрипт Шахты</b> — подсчет ресурсов, таймеры и полезные утилиты.\n"
+        "   └ 🔮 <b>Счетчик осколков</b> — лог дропа со скинов/домов и напоминание о квесте на X4.\n\n"
+        "<i>ℹ️ Файлы и инструкции станут доступны автоматически после одобрения заявки.</i>\n\n"
+        "👇 <b>Главное меню:</b>"
+        )
+    markup = await get_menu_markup(call.from_user.id)
+    await send_ui(call, caption, markup)
+
+
 def register_user_handlers(dp):
     """Register all user command handlers"""
     
@@ -61,7 +91,7 @@ def register_user_handlers(dp):
             "🛡 <b>Система доступа:</b> Принимает заявку и после одобрения дает возможность скачивание скрипта с уже активным к нему доступом.\n"
             "📜 <b>Библиотека скриптов:</b>\n"
             "   ├ ⛏ <b>Скрипт Шахты</b> — подсчет ресурсов, таймеры и полезные утилиты.\n"
-            "   └ 🔮 <b>Счетчик Осколков</b> — лог дропа со скинов/домов и напоминание о квесте на X4.\n\n"
+            "   └ 🔮 <b>Счетчик осколков</b> — лог дропа со скинов/домов и напоминание о квесте на X4.\n\n"
             "<i>ℹ️ Файлы и инструкции станут доступны автоматически после одобрения заявки.</i>\n\n"
             "👇 <b>Главное меню:</b>"
             )
@@ -80,35 +110,7 @@ def register_user_handlers(dp):
         await send_ui(message, "⚠️ Команда устарела. Используйте меню /start")
 
     # Menu callbacks
-    @dp.callback_query_handler(text="menu_start", state="*")
-    async def cb_menu_start(call: types.CallbackQuery, state: FSMContext):
-        """Return to main menu"""
-        await state.finish()
-        
-        # Delete script file if it was sent (in background, non-blocking)
-        file_msg_id = last_bot_msg.get(f"{call.from_user.id}_file")
-        if file_msg_id:
-            async def delete_file():
-                try:
-                    await call.bot.delete_message(call.from_user.id, file_msg_id)
-                    del last_bot_msg[f"{call.from_user.id}_file"]
-                except:
-                    pass
-            asyncio.create_task(delete_file())
-        
-        caption = (
-            f"👋 <b>Привет, {call.from_user.first_name}!</b>\n\n"
-            "🤖 <b>Magic Bot</b> — твой помощник для получения доступа к скриптам.\n\n"
-            "💎 <b>Возможности бота:</b>\n"
-            "🛡 <b>Система доступа:</b> Принимает заявку и после одобрения дает возможность скачивание скрипта с уже активным к нему доступом.\n"
-            "📜 <b>Библиотека скриптов:</b>\n"
-            "   ├ ⛏ <b>Скрипт Шахты</b> — подсчет ресурсов, таймеры и полезные утилиты.\n"
-            "   └ 🔮 <b>Счетчик Осколков</b> — лог дропа со скинов/домов и напоминание о квесте на X4.\n\n"
-            "<i>ℹ️ Файлы и инструкции станут доступны автоматически после одобрения заявки.</i>\n\n"
-            "👇 <b>Главное меню:</b>"
-            )
-        markup = await get_menu_markup(call.from_user.id)
-        await send_ui(call, caption, markup)
+    dp.register_callback_query_handler(cb_menu_start, text="menu_start", state="*")
 
     @dp.callback_query_handler(text="menu_help", state="*")
     async def cb_menu_help(call: types.CallbackQuery):
@@ -163,15 +165,24 @@ def register_user_handlers(dp):
         )
         markup = InlineKeyboardMarkup(row_width=2)
         
-        # Add buttons only for accessible scripts
+        # Add buttons for ALL scripts if user has access to at least one
+        # If user has access, show normal button. If not, show with lock.
         buttons = []
+        
+        # Mine Script
         if 'mine' in accessible_scripts:
             buttons.append(InlineKeyboardButton("⛏ Скрипт Шахты", callback_data="script_mine"))
+        else:
+            buttons.append(InlineKeyboardButton("🔒 Скрипт Шахты", callback_data="script_mine"))
+            
+        # Oskolki Script
         if 'oskolki' in accessible_scripts:
-            buttons.append(InlineKeyboardButton("🔮 Счетчик Осколков", callback_data="script_oskolki"))
+            buttons.append(InlineKeyboardButton("🔮 Счетчик осколков", callback_data="script_oskolki"))
+        else:
+            buttons.append(InlineKeyboardButton("🔒 Счетчик осколков", callback_data="script_oskolki"))
         
         if buttons:
-            markup.row(*buttons)
+            markup.add(*buttons)
         
         markup.add(InlineKeyboardButton("🏠 Главное меню", callback_data="menu_start"))
         await send_ui(call, caption, markup)
@@ -183,7 +194,7 @@ def register_user_handlers(dp):
         # Check access
         from bot.database.queries import has_script_access
         if not await has_script_access(call.from_user.id, 'mine'):
-            await call.answer("❌ У вас нет доступа к этому скрипту!", show_alert=True)
+            await call.answer("🔒 У вас нет доступа к этому скрипту! Запросите доступ через профиль.", show_alert=True)
             return
         
         caption = (
@@ -329,13 +340,13 @@ def register_user_handlers(dp):
         # Check access
         from bot.database.queries import has_script_access
         if not await has_script_access(call.from_user.id, 'oskolki'):
-            await call.answer("❌ У вас нет доступа к этому скрипту!", show_alert=True)
+            await call.answer("🔒 У вас нет доступа к этому скрипту! Запросите доступ через профиль.", show_alert=True)
             return
         
         from bot.config import OSKOLKI_SCRIPT_BANNER_ID
         
         caption = (
-            "🔮 <b>Счетчик Осколков</b>\n\n"
+            "🔮 <b>Счетчик осколков</b>\n\n"
             "📊 <b>Главные возможности:</b>\n"
             "• Статистика выпадений осколков по дням/месяцам\n"
             "• Напоминание о взятии квеста на осколок х4\n"
@@ -487,8 +498,21 @@ async def show_profile_logic(event, state):
         if res:
             nickname, approved = res
             
+            # Robust check if user is approved (extracted to a variable)
+            is_approved = False
+            if approved == 1 or approved == '1':
+                is_approved = True
+            elif isinstance(approved, str) and (approved.startswith('{') or approved.startswith('[')):
+                import json
+                try:
+                    acc_dict = json.loads(approved)
+                    if isinstance(acc_dict, dict) and any(acc_dict.values()):
+                        is_approved = True
+                except:
+                    pass
+
             # If approved (has some access)
-            if approved:
+            if is_approved:
                 from bot.utils.access_control import format_user_access_status, get_user_accessible_scripts
                 
                 # Get access status

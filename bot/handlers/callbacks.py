@@ -4,6 +4,7 @@ Handles all callback query handlers
 """
 
 import logging
+import json
 import asyncio
 from aiogram import types, Bot
 from aiogram.dispatcher import FSMContext
@@ -145,8 +146,11 @@ def register_callback_handlers(dp):
         
         markup = InlineKeyboardMarkup(row_width=3)
         markup.add(
-            InlineKeyboardButton("✅ Принять", callback_data=f"yes:{nick}:{uid}"),
-            InlineKeyboardButton("❌ Отказать", callback_data=f"pre_no:{nick}:{uid}"),
+            InlineKeyboardButton("✅ Одобрить все", callback_data=f"approve_all:{uid}:m1o1"),
+            InlineKeyboardButton("⚙️ Выбрать", callback_data=f"approve_select:{uid}:m1o1"),
+            InlineKeyboardButton("❌ Отказать", callback_data=f"pre_no:{nick}:{uid}")
+        )
+        markup.add(
             InlineKeyboardButton("🚫 БАН", callback_data=f"pre_ban:{nick}:{uid}")
         )
         await call.message.edit_reply_markup(reply_markup=markup)
@@ -309,7 +313,7 @@ def register_callback_handlers(dp):
         sid = int(call.data.split(":")[1])
         
         row = await db_fetch_with_retry(
-            "SELECT nickname, tg_user_id, suggestion_text, created_at FROM suggestions WHERE id = %s",
+            "SELECT nickname, tg_user_id, suggestion_text, created_at, script_name FROM suggestions WHERE id = %s",
             (sid,),
             fetch="one",
             action_desc="Ошибка чтения предложения"
@@ -318,9 +322,12 @@ def register_callback_handlers(dp):
         if not row:
             return await call.answer("❌ Предложение не найдено", show_alert=True)
         
-        nick, uid, stext, dt = row
+        nick, uid, stext, dt, sname = row
+        sname_display = sname if sname else "Не указан"
+        
         text = (
             f"💡 <b>Детали предложения #{sid}</b>\n\n"
+            f"🎮 <b>Скрипт:</b> {sname_display}\n"
             f"👤 <b>От:</b> <code>{nick}</code> (ID: <code>{uid}</code>)\n"
             f"📅 <b>Дата:</b> {dt}\n\n"
             f"📝 <b>Текст:</b>\n{stext}"
@@ -381,21 +388,90 @@ def register_callback_handlers(dp):
             await call.answer("Список устарел. Обновляю.", show_alert=True)
             return await cb_pending_list(call)
         
-        nick, uid = rows[idx - 1]
+        # rows tuple: (nickname, user_id, approved, requested_access)
+        row = rows[idx - 1]
+        nick = row[0]
+        uid = row[1]
+        approved = row[2]
+        requested = row[3]
+        
         if not uid:
             return await call.answer("У заявки нет ID пользователя", show_alert=True)
             
+        # Parse requested access
+        requested_text = "Не указано"
+        requested_code = ""
+        
+        try:
+            req_dict = {}
+            if requested:
+                if isinstance(requested, str):
+                   req_dict = json.loads(requested)
+                elif isinstance(requested, dict):
+                   req_dict = requested
+            
+            # If no requested_access but approved=0, it's a new legacy request or just registration without specifics
+            if not req_dict and (not approved or approved == '0' or approved == 0):
+                 req_dict = {'mine': True, 'oskolki': True}
+                 
+            req_list = []
+            code_list = []
+            
+            if req_dict.get('mine'): 
+                req_list.append("⛏ Скрипт Шахты")
+                code_list.append('m1')
+            else:
+                code_list.append('m0')
+                
+            if req_dict.get('oskolki'): 
+                req_list.append("🔮 Счетчик осколков")
+                code_list.append('o1')
+            else:
+                code_list.append('o0')
+                
+            requested_text = ", ".join(req_list) if req_list else "Ничего"
+            requested_code = "".join(code_list)
+            
+        except Exception as e:
+            logger.error(f"Error parsing requested access: {e}")
+            requested_text = "Ошибка данных"
+            requested_code = "m1o1" # Default fallback
+            
+        # Parse current access
+        current_text = "Нет"
+        try:
+            curr_dict = {}
+            if approved and approved != '0' and approved != 0:
+                if isinstance(approved, str):
+                   curr_dict = json.loads(approved)
+                elif isinstance(approved, dict):
+                   curr_dict = approved
+                   
+            curr_list = []
+            if curr_dict.get('mine'): curr_list.append("⛏ Скрипт Шахты")
+            if curr_dict.get('oskolki'): curr_list.append("🔮 Счетчик осколков")
+            
+            if curr_list:
+                current_text = ", ".join(curr_list)
+        except:
+            pass
+
         text = (
             f"📝 <b>Заявка #{idx}</b>\n\n"
             f"🎮 <b>Ник:</b> <code>{nick}</code>\n"
             f"👤 <b>ID:</b> <code>{uid}</code>\n\n"
+            f"📜 <b>Текущий доступ:</b> {current_text}\n"
+            f"➕ <b>Запрашивает:</b> {requested_text}\n\n"
             f"Выберите действие:"
         )
         
         markup = InlineKeyboardMarkup(row_width=3)
         markup.add(
-            InlineKeyboardButton("✅ Принять", callback_data=f"yes:{nick}:{uid}"),
-            InlineKeyboardButton("❌ Отказать", callback_data=f"pre_no:{nick}:{uid}"),
+            InlineKeyboardButton("✅ Одобрить", callback_data=f"approve_all:{uid}:{requested_code}"),
+            InlineKeyboardButton("⚙️ Выбрать", callback_data=f"approve_select:{uid}:{requested_code}"),
+            InlineKeyboardButton("❌ Отказать", callback_data=f"pre_no:{nick}:{uid}")
+        )
+        markup.add(
             InlineKeyboardButton("🚫 БАН", callback_data=f"pre_ban:{nick}:{uid}")
         )
         markup.add(InlineKeyboardButton("📋 К списку", callback_data="pending_list"))
@@ -527,21 +603,33 @@ def register_callback_handlers(dp):
             nick = d.split(":")[1]
             uid = call.from_user.id
             
+            logger.info(f"🗑 Запрос на удаление ника: {nick} (user_id: {uid})")
+            
             # Answer callback first
             try:
-                await call.answer("Ник удален")
+                await call.answer("⏳ Удаление...")
             except:
                 pass
             
-            # Delete from DB
-            success = await db_execute_with_retry(
-                "DELETE FROM access_list WHERE nickname=%s AND tg_user_id=%s",
-                (nick, uid),
-                action_desc="Ошибка удаления ника"
-            )
-            if not success:
-                logger.error("Не удалось удалить ник из БД после повторов.")
-            access_cache_remove(uid)
+            try:
+                # Delete from DB
+                success = await db_execute_with_retry(
+                    "DELETE FROM access_list WHERE nickname=%s AND tg_user_id=%s",
+                    (nick, uid),
+                    action_desc=f"Удаление ника {nick}"
+                )
+                
+                if success:
+                    logger.info(f"✅ Ник {nick} успешно удален из БД.")
+                else:
+                    logger.error(f"❌ Не удалось удалить ник {nick} из БД (success=False).")
+                
+                access_cache_remove(uid)
+                logger.debug(f"Cache cleared for user {uid}")
+                
+            except Exception as e:
+                logger.error(f"💥 Критическая ошибка при удалении ника: {e}", exc_info=True)
+                await call.answer("❌ Ошибка при удалении", show_alert=True)
             
             # Return to main menu
             await cb_menu_start(call, state)

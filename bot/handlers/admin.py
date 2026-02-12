@@ -133,7 +133,7 @@ def register_admin_handlers(dp):
             if success:
                 # Update cache
                 from bot.models.cache import access_cache_set
-                access_cache_set(user_id, nickname)
+                access_cache_set(user_id, nickname, current_access)
                 await message.reply(f"✅ Доступ к '⛏ Скрипт Шахты' отозван у пользователя <code>{nickname}</code>", parse_mode="HTML")
             else:
                 await message.reply("❌ Ошибка базы данных")
@@ -191,7 +191,7 @@ def register_admin_handlers(dp):
             if success:
                 # Update cache
                 from bot.models.cache import access_cache_set
-                access_cache_set(user_id, nickname)
+                access_cache_set(user_id, nickname, current_access)
                 await message.reply(f"✅ Доступ к '🔮 Счетчик осколков' отозван у пользователя <code>{nickname}</code>", parse_mode="HTML")
             else:
                 await message.reply("❌ Ошибка базы данных")
@@ -202,7 +202,7 @@ def register_admin_handlers(dp):
     async def build_pending_list(admin_id):
         """Build pending applications list"""
         rows = await db_fetch_with_retry(
-            "SELECT nickname, tg_user_id FROM access_list WHERE approved=0 OR approved IS NULL",
+            "SELECT nickname, tg_user_id, approved, requested_access FROM access_list WHERE approved=0 OR requested_access IS NOT NULL",
             fetch="all",
             action_desc="Ошибка получения списка заявок"
         )
@@ -217,6 +217,12 @@ def register_admin_handlers(dp):
             for idx, r in enumerate(rows, start=1):
                 nick = r[0]
                 uid = r[1] if r[1] else "N/A"
+                approved = r[2]
+                requested = r[3]
+                
+                status = "🆕" # New user
+                if approved and approved != 0 and approved != '0':
+                     status = "🆙" # Upgrade request
                 
                 username = None
                 if uid != "N/A":
@@ -231,7 +237,7 @@ def register_admin_handlers(dp):
                 if username:
                     user_info = f"{username} (ID: {uid})"
                 
-                text += f"{idx}. <code>{nick}</code> — {user_info}\n"
+                text += f"{idx}. {status} <code>{nick}</code> — {user_info}\n"
         
         markup = InlineKeyboardMarkup(row_width=5)
         if rows:
@@ -417,7 +423,7 @@ def register_admin_handlers(dp):
     async def show_suggestions_list(message: types.Message, edit=False):
         """Show suggestions list"""
         rows = await db_fetch_with_retry(
-            "SELECT id, nickname, suggestion_text FROM suggestions ORDER BY created_at DESC",
+            "SELECT id, nickname, suggestion_text, script_name FROM suggestions ORDER BY created_at DESC",
             fetch="all",
             action_desc="Ошибка получения предложений"
         )
@@ -435,9 +441,10 @@ def register_admin_handlers(dp):
         
         btns = []
         for i, row in enumerate(rows, 1):
-            sid, nick, stext = row
-            short_text = (stext[:30] + '...') if len(stext) > 30 else stext
-            text += f"{i}. <b>{nick}</b>: {short_text}\n"
+            sid, nick, stext, sname = row
+            sname_display = f"[{sname}]" if sname else ""
+            short_text = (stext[:20] + '...') if len(stext) > 20 else stext
+            text += f"{i}. <b>{nick}</b> {sname_display}: {short_text}\n"
             btns.append(InlineKeyboardButton(str(i), callback_data=f"view_suggest:{sid}"))
         
         for i in range(0, len(btns), 5):

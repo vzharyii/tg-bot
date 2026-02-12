@@ -164,30 +164,61 @@ def register_additional_access_handlers(dp):
         caption_admin = (
             f"➕ <b>ЗАПРОС ДОПОЛНИТЕЛЬНОГО ДОСТУПА</b>\n\n"
             f"👤 <b>От:</b> {user_link} (ID: <code>{user_id}</code>)\n"
-            f"🎮 <b>Ник:</b> <code>{nickname}</code>\n\n"
-            f"📜 <b>Текущий доступ:</b> {current_text}\n"
-            f"➕ <b>Запрашивает:</b> {requested_text}"
         )
+        # Prepare requested access JSON
+        requested_access = {}
+        if selected.get('mine'):
+            requested_access['mine'] = True
+        if selected.get('oskolki'):
+            requested_access['oskolki'] = True
         
-        # Create admin approval keyboard
-        scripts_json = json.dumps(selected)
+        requested_json = json.dumps(requested_access)
         
-        markup_admin = InlineKeyboardMarkup(row_width=3)
-        markup_admin.add(
-            InlineKeyboardButton("✅ Одобрить все", callback_data=f"approve_additional_all:{user_id}:{scripts_json}"),
-            InlineKeyboardButton("⚙️ Выбрать", callback_data=f"approve_additional_select:{user_id}:{scripts_json}"),
-            InlineKeyboardButton("❌ Отказать", callback_data=f"reject_additional:{user_id}")
+        # Update DB with requested_access
+        await db_execute_with_retry(
+            "UPDATE access_list SET requested_access = %s WHERE tg_user_id = %s",
+            (requested_json, call.from_user.id),
+            action_desc="Сохранение запроса на доп. доступ"
         )
-        
+
+        # Notify admin
         try:
-            # Send with photo if file_id is set
+            # Generate short code for approval buttons
+            short_code_list = []
+            if requested_access.get('mine'): short_code_list.append('m1')
+            else: short_code_list.append('m0')
+            
+            if requested_access.get('oskolki'): short_code_list.append('o1')
+            else: short_code_list.append('o0')
+            
+            short_code = "".join(short_code_list)
+            
+            caption = (
+                f"➕ <b>Запрос дополнительного доступа</b>\n\n"
+                f"👤 <b>От:</b> {call.from_user.mention}\n"
+                f"🆔 <b>ID:</b> <code>{call.from_user.id}</code>\n"
+                f"📜 <b>Запрашивает:</b> {requested_text}\n\n"
+                f"<i>Заявка сохранена в базе и доступна через /pending</i>"
+            )
+            
+            markup = InlineKeyboardMarkup(row_width=2)
+            markup.add(
+                InlineKeyboardButton("✅ Одобрить все", callback_data=f"approve_additional_all:{call.from_user.id}:{short_code}"),
+                InlineKeyboardButton("⚙️ Выбрать", callback_data=f"approve_additional_select:{call.from_user.id}:{short_code}")
+            )
+            
+            # Assuming PHOTO_FILE_ID is defined elsewhere or REQUEST_PHOTO_FILE_ID should be used
+            # Using REQUEST_PHOTO_FILE_ID as it's already imported
             if REQUEST_PHOTO_FILE_ID and REQUEST_PHOTO_FILE_ID != "ВСТАВЬ_СЮДА_FILE_ID_ФОТКИ_ЗАЯВОК":
-                await call.bot.send_photo(ADMIN_ID, REQUEST_PHOTO_FILE_ID, caption=caption_admin, reply_markup=markup_admin, parse_mode="HTML")
+                await call.bot.send_photo(ADMIN_ID, REQUEST_PHOTO_FILE_ID, caption=caption, reply_markup=markup, parse_mode="HTML")
             else:
-                await call.bot.send_message(ADMIN_ID, text=caption_admin, reply_markup=markup_admin, parse_mode="HTML")
+                await call.bot.send_message(ADMIN_ID, text=caption, reply_markup=markup, parse_mode="HTML")
         except Exception as e:
-            logger.error(f"Err admin send: {e}")
+            logger.error(f"Не удалось отправить уведомление админу: {e}")
         
+        # Notify user
+        # Assuming get_menu_markup is defined elsewhere or a default markup is needed
+        # Using the original markup_home for consistency if get_menu_markup is not available
         markup_home = InlineKeyboardMarkup()
         markup_home.add(InlineKeyboardButton("👤 Профиль", callback_data="menu_profile"))
         markup_home.add(InlineKeyboardButton("🏠 В главное меню", callback_data="menu_start"))
