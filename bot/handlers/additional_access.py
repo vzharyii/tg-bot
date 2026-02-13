@@ -158,13 +158,6 @@ def register_additional_access_handlers(dp):
             current_list.append("🔮 Счетчик осколков")
         current_text = ", ".join(current_list) if current_list else "нет"
         
-        # Send to admin
-        user_link = f"@{call.from_user.username}" if call.from_user.username else f"<a href='tg://user?id={user_id}'>{call.from_user.full_name}</a>"
-        
-        caption_admin = (
-            f"➕ <b>ЗАПРОС ДОПОЛНИТЕЛЬНОГО ДОСТУПА</b>\n\n"
-            f"👤 <b>От:</b> {user_link} (ID: <code>{user_id}</code>)\n"
-        )
         # Prepare requested access JSON
         requested_access = {}
         if selected.get('mine'):
@@ -193,10 +186,12 @@ def register_additional_access_handlers(dp):
             
             short_code = "".join(short_code_list)
             
+            user_link = f"@{call.from_user.username}" if call.from_user.username else f"<a href='tg://user?id={user_id}'>{call.from_user.full_name}</a>"
+
             caption = (
                 f"➕ <b>Запрос дополнительного доступа</b>\n\n"
-                f"👤 <b>От:</b> {call.from_user.mention}\n"
-                f"🆔 <b>ID:</b> <code>{call.from_user.id}</code>\n"
+                f"👤 <b>От:</b> {user_link}\n"
+                f"🎮 <b>Ник:</b> <code>{nickname}</code>\n"
                 f"📜 <b>Запрашивает:</b> {requested_text}\n\n"
                 f"<i>Заявка сохранена в базе и доступна через /pending</i>"
             )
